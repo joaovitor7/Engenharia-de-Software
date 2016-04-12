@@ -16,7 +16,6 @@
 #
 import webapp2
 import cgi
-import datetime
 import urllib
 import sys
 class Vertex:
