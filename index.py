@@ -1,3 +1,23 @@
+#!/usr/bin/env python
+#
+# Copyright 2007 Google Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+import webapp2
+import cgi
+import datetime
+import urllib
 import sys
 class Vertex:
     def __init__(self, node):
@@ -118,23 +138,21 @@ def dijkstra(aGraph, start, target):
         unvisited_queue = [(v.get_distance(),v) for v in aGraph if not v.visited]
         heapq.heapify(unvisited_queue)
     
-if __name__ == '__main__':
+g = Graph()
 
-    g = Graph()
-
-    g.add_vertex('a')
-    g.add_vertex('b')
-    g.add_vertex('c')
-    g.add_vertex('d')
-    g.add_vertex('e')
+g.add_vertex('a')
+g.add_vertex('b')
+g.add_vertex('c')
+g.add_vertex('d')
+g.add_vertex('e')
     
 
-    g.add_edge('a','b',1)
-    g.add_edge('a','c',2)
-    g.add_edge('a','e',5)
-    g.add_edge('b','d',4)
-    g.add_edge('c','e',2)
-    g.add_edge('d','e',1)
+g.add_edge('a','b',1)
+g.add_edge('a','c',2)
+g.add_edge('a','e',5)
+g.add_edge('b','d',4)
+g.add_edge('c','e',2)
+g.add_edge('d','e',1)
 
 def melhor(a,e):
     dijkstra(g, g.get_vertex(a), g.get_vertex(e)) 
@@ -148,86 +166,141 @@ def melhor(a,e):
         melhor_caminho+=' '+i
     return melhor_caminho
 
-
-
 from google.appengine.ext import db
-print "Content-Type:text/html; charset=UTF-8\n"
-print "<!doctype html>"
-print "<html>"
-print "<body>"
-print "<h1>Sistema de calculo de menor rota</h1>"
-print "Bem vindo ao sistema de calculo de melhor rota de uma sala para a outra!!\n"
-print 'Dado o grafo(mapa):<p><img src="https://2.bp.blogspot.com/-UovahJGzt-E/VwqXEvQMaoI/AAAAAAAAAAk/xfN5xEh8yBo1OGrV03patbf-uzcN1G-CQ/s1600/grafo.jpg" alt="grafo" height="196" width="332"></p>'
-print "Cadastre seu nome e sua sala e calcule qual a melhor rota da sua sala para as outras onde os outros aulos estão."
-import os
-def qs(x):
-    if os.environ['QUERY_STRING']:
-        for t in os.environ['QUERY_STRING'].split("&"):
-            if t.split("=")[0]==x:return t.split("=")[1]
-    return ''
-import cgi
-POST=cgi.FieldStorage()
-def pv(x):
-    if(POST.getvalue(x)):return POST.getvalue(x)
-    return ''
-from google.appengine.ext import db
+from google.appengine.api import users
+
 class Aluno(db.Model):
-    nome=db.ByteStringProperty(default='')
-    sala=db.ByteStringProperty(default='')
-if pv('nome'):
-    if qs('id'):
-        reg=db.get(qs('id'))
-        reg.nome=pv('nome')
-        reg.sala=pv('sala')
-        reg.put()
-    else:
-        Aluno(nome=pv('nome'),sala=pv('sala')).put()
-if qs('del'):
-    db.delete(qs('del'))
-if qs('cal'):
-    reg=db.get(qs('cal'))
-    print "<hr><form action=index.py?cal="+qs('cal')+" method=post>"
-    print "<p>Insira o nome de algum aluno que esta na sala onde voce quer chegar</p>"
-    print "De <input name=saida value='"+str(reg.nome)+"'><br>"
-    print "Ate <input name=chegada><br>"
-    print "<input type=submit value=calcular> <input type=button value=Voltar onclick=\"location.href='index.py';\">"
+    nome=db.StringProperty(default='')
+    sala=db.StringProperty(default='')
 
-if pv('saida'):
-    if qs('cal'):
-        reg=db.get(qs('cal'))
+def AlunoKey():
+    return db.Key.from_path('Aluno','defaultaluno')
+
+def AlunoById(id):
+    return Aluno.get_by_id(id,parent=AlunoKey())
+
+
+#PAGES#################################################
+class MainPage(webapp2.RequestHandler):
+    def get(self):
+	self.response.write ("<html>"
+                                    "<body>"
+					"<h1>Sistema de calculo de menor rota</h1>"
+					"Bem vindo ao sistema de calculo de melhor rota de uma sala para a outra!!\n"
+					'Dado o grafo(mapa):<p><img src="https://2.bp.blogspot.com/-UovahJGzt-E/VwqXEvQMaoI/AAAAAAAAAAk/xfN5xEh8yBo1OGrV03patbf-uzcN1G-CQ/s1600/grafo.jpg" alt="grafo" height="196" width="332"></p>'
+					"<p>Cadastre seu nome e sua sala e calcule qual a melhor rota da sua sala para as outras onde os outros aulos estao</p>."
+				    '</body>'
+				'</html>')									
+	self.response.write('<html>'
+                                    '<body>'
+                                        '<a href="/AddAluno">Adicionar Aluno</a>')
+
+        Alunos = db.GqlQuery("select * from Aluno order by sala desc limit 10")
+
+        self.response.write('<ul>')
+
+        self.response.write('<p>Alunos Cadastrados</p>')
+        self.response.write("")
+        for post in Alunos:
+            self.response.write('<li>{nome} da sala : {sala} ' \
+            '<a href="/EditAluno?id={key}">Editar Aluno</a><a href="/CalcularMelhorCaminho?id={key}"> Calcular melhor rota</a></li>'
+                .format(nome=post.nome,sala=post.sala,key=post.key().id()))
+
+        self.response.write('</ul>')
+        self.response.write('</body></html>')
+
+
+class AddAluno(webapp2.RequestHandler):
+    def get(self):
+        self.response.write(
+            '<html>'
+                '<body>'
+                '<form action="/AddAluno" method="POST">'
+                    'Aluno:<input type=text name=aluno value=""/>'
+                    '<br>Sala:<input type=text name=sala value=""/>'
+                    '<br><input type=submit text="Salvar"/>'
+                '</form>'
+                '</body>'
+            '</html>')
+    def post(self):
+        nome = self.request.get('aluno')
+        sala = self.request.get('sala')
+        newpost = Aluno(parent=AlunoKey())
+        newpost.nome = nome
+        newpost.sala = sala
+        newpost.put()
+        self.redirect('/')
+
+class EditAluno(webapp2.RequestHandler):
+    def get(self):
+        id = int(self.request.get('id'))
+        newaluno = AlunoById(id)
+        self.response.write(
+            '<html>'
+                '<body>'
+                '<form action="/EditAluno" method="POST">'
+                    '<input type="hidden" value="{id}" name="id">'
+                    'Aluno:<input type=text name=aluno value="{aluno}"/>'
+                    '<br>Sala:<input type=text name=sala value="{sala}"/>'
+                    '<br><input type=submit value="Salvar"/>'
+                '</form>'
+                '<form action="/DeleteAluno" method="POST">'
+                    '<input type="hidden" value="{id}" name="id">'
+                    '<br><input type=submit value="delete"/>'
+                '</form>'
+                '</body>'
+            '</html>'
+            .format(aluno=newaluno.nome,
+                sala=newaluno.sala,id=newaluno.key().id()))
+    def post(self):
+        aluno = self.request.get('aluno')
+        sala = self.request.get('sala')
+        id = int(self.request.get('id'))
+        newaluno = AlunoById(id)
+        newaluno.nome = aluno
+        newaluno.sala = sala
+        newaluno.put()
+        self.redirect('/')
+
+class DeleteAluno(webapp2.RequestHandler):
+    def post(self):
+        id = int(self.request.get('id'))
+        newaluno = AlunoById(id)
+        newaluno.delete()
+        self.redirect('/')
+
+class CalcularMelhorCaminho(webapp2.RequestHandler):
+    def get(self):
+        id = long(self.request.get('id'))
+        newaluno = AlunoById(id)
+        self.response.write(
+            '<html>'
+                '<body>'
+                '<form action="/CalcularMelhorCaminho" method="POST">'
+                    '<input type="hidden" value="{id}" name="id">'
+                    'Do Aluno:<input type=text name=saida value="{aluno}"/>'
+                    '<br>Ate o Aluno:<input type=text name=chegada value=""/>'
+                    '<br><input type=submit value="Calcular"/>'
+                '</form>'
+                
+                '</body>'
+            '</html>'
+            .format(aluno=newaluno.nome,id=newaluno.key().id()))
+    def post(self):
+        id = int(self.request.get('id'))
+        aluno=AlunoById(id)
+        saida=aluno.sala
+        aluno_2=self.request.get('chegada')
         for obj in Aluno.all():
-            if str(obj.nome)==pv('chegada'):
-                print "<hr><form method=post>"
-                print '<font size="3" color="red">Melhor caminho eh :'+ melhor(str(reg.sala),str(obj.sala))+'</font>'
+            if str(obj.nome)==aluno_2:
+                self.response.write('<font size="3" color="red">Melhor caminho eh :'+ melhor(str(saida),str(obj.sala))+'</font>')
                 break
         else:
-            print "<hr><form method=post>"
-            print "Aluno de chegada nÃ£o cadastrado"
-        print "<input type=button value=Voltar onclick=\"location.href='index.py';\">"
-
-
-if (pv('nome')or qs('del')):
-    print "<a href=index.py>voltar pra listagem</a>"
-else:
-    print "<table border=1>";
-    print "<tr><td>Cadastro de Alunos</td></tr>";
-    print "<tr><td>Alunos</td><td>Salas</td></tr>";
-    for reg in Aluno.all().order('nome'):
-        print "<tr><td>"+str(reg.nome)+"</td><td>"+str(reg.sala)+"</td><td><input type=button value=Alterar onclick=\"location.href='index.py?id="+str(reg.key())+"';\"><input type=button value=Melhor onclick=\"location.href='index.py?cal="+str(reg.key())+"';\"> <input type=button value=Excuir onclick=\"if(confirm('Tem Certeza que deseja excluir esse aluno?'))location.href='index.py?del="+str(reg.key())+"';\"></td></tr>"
-    print "</table>";
-if (qs('id') and not pv('nome')):
-    reg=db.get(qs('id'))
-    print "<hr><form action=index.py?id="+qs('id')+" method=post>"
-    print "Nome <input name=nome value='"+str(reg.nome)+"'><br>"
-    print "Sala <input name=sala value='"+str(reg.sala)+"'><br>"
-    print "<input type=submit value=Salvar> <input type=button value=Novo onclick=\"location.href='index.py';\">"
-else:
-    print "<hr><form method=post>"
-    print "Nome <input name=nome><br>"
-    print "Sala <input name=sala><br>"
-    print "<input type=submit value=Salvar>"
-    
-    
-print "</form><hr>"
-print "</body>"
-print "</html>"
+            self.response.write( "Aluno de chegada nao cadastrado")
+            
+app = webapp2.WSGIApplication([('/', MainPage),
+                                ('/AddAluno',AddAluno),
+                                ('/EditAluno',EditAluno),
+                                ('/DeleteAluno',DeleteAluno),
+                                ('/CalcularMelhorCaminho',CalcularMelhorCaminho)],
+                              debug=True)
